@@ -1,0 +1,78 @@
+BEGIN;
+BEGIN
+EXPLAIN (ANALYZE, BUFFERS)
+select
+	l_orderkey,
+	sum(l_extendedprice * (1 - l_discount)) as revenue,
+	o_orderdate,
+	o_shippriority
+from
+	customer,
+	orders,
+	lineitem
+where
+	c_mktsegment = 'AUTOMOBILE'
+	and c_custkey = o_custkey
+	and l_orderkey = o_orderkey
+	and o_orderdate < date '1995-03-08'
+	and l_shipdate > date '1995-03-08'
+group by
+	l_orderkey,
+	o_orderdate,
+	o_shippriority
+order by
+	revenue desc,
+	o_orderdate
+LIMIT 10;
+                                                                                             QUERY PLAN                                                                                              
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=2566505.93..2566505.96 rows=10 width=20) (actual time=37632.255..37632.258 rows=10 loops=1)
+   Buffers: shared hit=842193 read=531429 dirtied=38 written=3960
+   ->  Sort  (cost=2566505.93..2574470.59 rows=3185863 width=20) (actual time=37632.252..37632.253 rows=10 loops=1)
+         Sort Key: (sum((lineitem.l_extendedprice * (1::double precision - lineitem.l_discount)))), orders.o_orderdate
+         Sort Method: top-N heapsort  Memory: 25kB
+         Buffers: shared hit=842193 read=531429 dirtied=38 written=3960
+         ->  HashAggregate  (cost=2465801.95..2497660.58 rows=3185863 width=20) (actual time=37565.487..37611.198 rows=114004 loops=1)
+               Group Key: lineitem.l_orderkey, orders.o_orderdate, orders.o_shippriority
+               Buffers: shared hit=842187 read=531429 dirtied=38 written=3960
+               ->  Hash Join  (cost=770983.74..2418014.00 rows=3185863 width=20) (actual time=9285.190..37279.864 rows=301214 loops=1)
+                     Hash Cond: (lineitem.l_orderkey = orders.o_orderkey)
+                     Buffers: shared hit=842187 read=531429 dirtied=38 written=3960
+                     ->  Bitmap Heap Scan on lineitem  (cost=255232.51..1746976.15 rows=32914131 width=12) (actual time=126.669..22047.968 rows=32540143 loops=1)
+                           Recheck Cond: (l_shipdate > '1995-03-08'::date)
+                           Rows Removed by Index Recheck: 27504890
+                           Heap Blocks: lossy=1080317
+                           Buffers: shared hit=622002 read=458363 written=3813
+                           ->  Bitmap Index Scan on lineitem_l_shipdate_l_suppkey_brin_idx  (cost=0.00..247003.98 rows=32914131 width=0) (actual time=125.912..125.912 rows=10803200 loops=1)
+                                 Index Cond: (l_shipdate > '1995-03-08'::date)
+                                 Buffers: shared hit=13 read=35
+                     ->  Hash  (cost=497348.56..497348.56 rows=1472214 width=12) (actual time=9149.138..9149.138 rows=1450650 loops=1)
+                           Buckets: 2097152  Batches: 1  Memory Usage: 78717kB
+                           Buffers: shared hit=220185 read=73066 dirtied=38 written=147
+                           ->  Hash Join  (cost=106654.77..497348.56 rows=1472214 width=12) (actual time=758.568..8621.059 rows=1450650 loops=1)
+                                 Hash Cond: (orders.o_custkey = customer.c_custkey)
+                                 Buffers: shared hit=220185 read=73066 dirtied=38 written=147
+                                 ->  Bitmap Heap Scan on orders  (cost=56869.51..405343.01 rows=7332840 width=16) (actual time=27.724..4950.414 rows=7253411 loops=1)
+                                       Recheck Cond: (o_orderdate < '1995-03-08'::date)
+                                       Rows Removed by Index Recheck: 7761589
+                                       Heap Blocks: lossy=256813
+                                       Buffers: shared hit=220183 read=36641 dirtied=38 written=112
+                                       ->  Bitmap Index Scan on orders_o_orderkey_o_orderdate_brin_idx  (cost=0.00..55036.30 rows=7332840 width=0) (actual time=27.563..27.563 rows=2568960 loops=1)
+                                             Index Cond: (o_orderdate < '1995-03-08'::date)
+                                             Buffers: shared hit=3 read=8
+                                 ->  Hash  (cost=46020.82..46020.82 rows=301155 width=4) (actual time=728.328..728.328 rows=300036 loops=1)
+                                       Buckets: 524288  Batches: 1  Memory Usage: 14645kB
+                                       Buffers: shared hit=2 read=36425 written=35
+                                       ->  Bitmap Heap Scan on customer  (cost=6978.38..46020.82 rows=301155 width=4) (actual time=77.413..634.905 rows=300036 loops=1)
+                                             Recheck Cond: (c_mktsegment = 'AUTOMOBILE'::bpchar)
+                                             Heap Blocks: exact=35275
+                                             Buffers: shared hit=2 read=36425 written=35
+                                             ->  Bitmap Index Scan on customer_c_mktsegment_c_custkey_idx  (cost=0.00..6903.09 rows=301155 width=0) (actual time=68.323..68.323 rows=300036 loops=1)
+                                                   Index Cond: (c_mktsegment = 'AUTOMOBILE'::bpchar)
+                                                   Buffers: shared read=1152
+ Planning time: 3.858 ms
+ Execution time: 37648.163 ms
+(46 rows)
+
+COMMIT;
+COMMIT

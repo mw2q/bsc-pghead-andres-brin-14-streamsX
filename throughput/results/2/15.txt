@@ -1,0 +1,86 @@
+BEGIN;
+BEGIN
+create or replace view revenue2 (supplier_no, total_revenue) as
+	select
+		l_suppkey,
+		sum(l_extendedprice * (1 - l_discount))
+	from
+		lineitem
+	where
+		l_shipdate >= '1995-11-01'
+		and l_shipdate < date'1995-11-01' + interval '90 days'
+	group by
+		l_suppkey;
+CREATE VIEW
+EXPLAIN (ANALYZE, BUFFERS)
+select
+	s_suppkey,
+	s_name,
+	s_address,
+	s_phone,
+	total_revenue
+from
+	supplier,
+	revenue2
+where
+	s_suppkey = supplier_no
+	and total_revenue = (
+		select
+			max(total_revenue)
+		from
+			revenue2
+	)
+order by
+	s_suppkey;
+                                                                                          QUERY PLAN                                                                                          
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Join  (cost=3409548.11..3414645.75 rows=3763 width=79) (actual time=49810.661..49810.664 rows=1 loops=1)
+   Merge Cond: (supplier.s_suppkey = revenue2.supplier_no)
+   Buffers: shared hit=1235433 read=909535 dirtied=1057 written=6528
+   InitPlan 1 (returns $0)
+     ->  Aggregate  (cost=1696151.34..1696151.35 rows=1 width=8) (actual time=24199.604..24199.604 rows=1 loops=1)
+           Buffers: shared hit=620521 read=451322 written=196
+           ->  HashAggregate  (cost=1696066.68..1696104.31 rows=3763 width=12) (actual time=24149.843..24188.602 rows=100000 loops=1)
+                 Group Key: lineitem_1.l_suppkey
+                 Buffers: shared hit=620521 read=451322 written=196
+                 ->  Bitmap Heap Scan on lineitem lineitem_1  (cost=201002.31..1673371.16 rows=2269552 width=12) (actual time=119.662..21962.968 rows=2243534 loops=1)
+                       Recheck Cond: (l_shipdate >= '1995-11-01'::date)
+                       Rows Removed by Index Recheck: 33425343
+                       Filter: (l_shipdate < '1996-01-30 00:00:00'::timestamp without time zone)
+                       Rows Removed by Filter: 24376949
+                       Heap Blocks: lossy=1071795
+                       Buffers: shared hit=620521 read=451322 written=196
+                       ->  Bitmap Index Scan on lineitem_l_shipdate_l_suppkey_brin_idx  (cost=0.00..200434.92 rows=26704923 width=0) (actual time=118.905..118.905 rows=10728960 loops=1)
+                             Index Cond: (l_shipdate >= '1995-11-01'::date)
+                             Buffers: shared hit=13 read=35
+   ->  Index Scan using pk_supplier on supplier  (cost=0.29..4791.49 rows=100000 width=71) (actual time=0.019..13.768 rows=46963 loops=1)
+         Buffers: shared hit=1282
+   ->  Sort  (cost=1713396.46..1713405.87 rows=3763 width=12) (actual time=49792.195..49792.196 rows=1 loops=1)
+         Sort Key: revenue2.supplier_no
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=1234151 read=909535 dirtied=1057 written=6528
+         ->  Subquery Scan on revenue2  (cost=1713088.32..1713172.98 rows=3763 width=12) (actual time=49774.281..49792.175 rows=1 loops=1)
+               Buffers: shared hit=1234151 read=909535 dirtied=1057 written=6528
+               ->  HashAggregate  (cost=1713088.32..1713135.35 rows=3763 width=12) (actual time=49774.279..49792.171 rows=1 loops=1)
+                     Group Key: lineitem.l_suppkey
+                     Filter: (sum((lineitem.l_extendedprice * (1::double precision - lineitem.l_discount))) = $0)
+                     Rows Removed by Filter: 99999
+                     Buffers: shared hit=1234151 read=909535 dirtied=1057 written=6528
+                     ->  Bitmap Heap Scan on lineitem  (cost=201002.31..1673371.16 rows=2269552 width=12) (actual time=123.520..23255.643 rows=2243534 loops=1)
+                           Recheck Cond: (l_shipdate >= '1995-11-01'::date)
+                           Rows Removed by Index Recheck: 33425343
+                           Filter: (l_shipdate < '1996-01-30 00:00:00'::timestamp without time zone)
+                           Rows Removed by Filter: 24376949
+                           Heap Blocks: lossy=1071795
+                           Buffers: shared hit=613630 read=458213 dirtied=1057 written=6332
+                           ->  Bitmap Index Scan on lineitem_l_shipdate_l_suppkey_brin_idx  (cost=0.00..200434.92 rows=26704923 width=0) (actual time=122.731..122.731 rows=10718720 loops=1)
+                                 Index Cond: (l_shipdate >= '1995-11-01'::date)
+                                 Buffers: shared hit=13 read=35
+ Planning time: 2.678 ms
+ Execution time: 49813.493 ms
+(44 rows)
+
+drop view revenue2;
+DROP VIEW
+COMMIT;
+COMMIT
